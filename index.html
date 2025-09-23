@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Привет, видео и онлайн-чат</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+
+<script>
+  // 🔹 Вставь сюда свой Firebase-конфиг
+  const firebaseConfig = {
+    apiKey: "AIzaSyC8lcLregxdwR6GBSrkMqlWoZNdUuU3jdM",
+    authDomain: "chat-ca735.firebaseapp.com",
+    databaseURL: "https://chat-ca735-default-rtdb.firebaseio.com",
+    projectId: "chat-ca735",
+    storageBucket: "chat-ca735.firebasestorage.app",
+    messagingSenderId: "407446630782",
+    appId: "1:407446630782:android:db7293a24c6e6445ebc32f"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const auth = firebase.auth();
+</script>
+
+<style>
+  body { margin:0; height:100vh; font-family: Arial, sans-serif; display:flex; background: linear-gradient(135deg,#000,#111,#222); background-size:400% 400%; animation: gradientBG 15s ease infinite; }
+  @keyframes gradientBG { 0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;} }
+
+  #auth { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; color:white; }
+
+  /* Кнопка Google */
+  .google-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #444;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .google-btn:hover {
+    background: #f5f5f5;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  }
+  .google-icon { width: 20px; height: 20px; }
+
+  #chatApp { display:none; flex:1; width:100%; height:100%; flex-direction:row; }
+
+  .main-content { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white; padding:10px; }
+  .welcome { font-size:48px; font-weight:bold; opacity:0; transform:translateY(-20px); animation:fadeIn 2s forwards 1s; }
+  @keyframes fadeIn { to { opacity:1; transform:translateY(0); } }
+
+  .video-input { margin-top:20px; display:flex; gap:10px; flex-wrap:wrap; }
+  input[type="text"]{ padding:10px; font-size:16px; border-radius:5px; border:none; width:250px; }
+  button { padding:10px 20px; font-size:16px; border-radius:5px; border:none; cursor:pointer; }
+
+  .video-container { margin-top:20px; width:100%; max-width:560px; display:none; }
+  .video-container iframe { width:100%; height:315px; border:none; border-radius:10px; }
+
+  .chat { width:300px; background:rgba(0,0,0,0.6); display:flex; flex-direction:column; padding:10px; color:white; }
+  .chat-messages { flex:1; overflow-y:auto; margin-bottom:10px; }
+  .chat-message { margin:5px 0; }
+  .chat input[type="text"] { padding:5px; font-size:14px; width:calc(100% - 60px); border-radius:5px; border:none; }
+  .chat button { padding:5px 10px; font-size:14px; border-radius:5px; }
+</style>
+</head>
+<body>
+
+<div id="auth">
+  <button id="googleSignIn" class="google-btn">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google" class="google-icon">
+    Войти через Google
+  </button>
+</div>
+
+<div id="chatApp" class="layout">
+  <div class="main-content">
+    <div class="welcome">Привет!</div>
+    <div class="video-input">
+      <input type="text" id="videoLink" placeholder="Вставьте ссылку на YouTube">
+      <button onclick="showVideo()">Показать видео</button>
+    </div>
+    <div class="video-container" id="videoContainer"></div>
+  </div>
+
+  <div class="chat">
+    <div class="chat-messages" id="chatMessages"></div>
+    <div style="display:flex; gap:5px;">
+      <input type="text" id="chatInput" placeholder="Введите сообщение">
+      <button onclick="sendMessage()">Отправить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 🔹 Показ видео
+  function showVideo() {
+    const link = document.getElementById('videoLink').value;
+    const videoId = extractVideoID(link);
+    if(videoId) {
+      const container = document.getElementById('videoContainer');
+      container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
+      container.style.display = 'block';
+    } else alert('Неверная ссылка на YouTube');
+  }
+  function extractVideoID(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length===11)?match[2]:null;
+  }
+
+  // 🔹 Вход через Google
+  const googleProvider = new firebase.auth.GoogleAuthProvider();
+  document.getElementById('googleSignIn').addEventListener('click', ()=>{
+    auth.signInWithPopup(googleProvider)
+      .then(result=>{
+        const user=result.user;
+        document.getElementById('auth').style.display='none';
+        document.getElementById('chatApp').style.display='flex';
+        startChat(user);
+      })
+      .catch(err=>alert('Ошибка входа: '+err.message));
+  });
+
+  // 🔹 Онлайн-чат
+  function startChat(user){
+    const chatRef=db.ref("messages");
+    chatRef.on("child_added",snapshot=>{
+      const msg=snapshot.val();
+      displayMessage(msg.text,msg.time,msg.userName);
+    });
+
+    window.sendMessage=function(){
+      const input=document.getElementById('chatInput');
+      const text=input.value.trim();
+      if(text){
+        chatRef.push({text:text,userName:user.displayName,time:Date.now()});
+        input.value='';
+      }
+    }
+
+    function displayMessage(text,timestamp,userName){
+      const chat=document.getElementById('chatMessages');
+      const div=document.createElement('div');
+      div.classList.add('chat-message');
+      const time=new Date(timestamp).toLocaleTimeString();
+      div.textContent=`[${time}] ${userName}: ${text}`;
+      chat.appendChild(div);
+      chat.scrollTop=chat.scrollHeight;
+    }
+  }
+</script>
+
+</body>
+</html>
